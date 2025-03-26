@@ -109,7 +109,7 @@ jobs:
 
           echo "BLUEPRINT=$BLUEPRINT" >> $GITHUB_ENV
 
-      - name: Simulate Status: In Progress
+      - name: Simulate Status: In-Progress
         run: |
           sleep 30
           curl -s -X PATCH "https://api.getport.io/v1/blueprints/${{ env.BLUEPRINT }}/entities/${{ env.IDENTIFIER }}" \
