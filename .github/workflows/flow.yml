@@ -21,8 +21,8 @@ jobs:
           access_token=$(curl --location --request POST 'https://api.getport.io/v1/auth/access_token' \
           --header 'Content-Type: application/json' \
           --data-raw '{
-              "clientId": "'${{ secrets.PORT_CLIENT_ID }}'",
-              "clientSecret": "'${{ secrets.PORT_CLIENT_SECRET }}'"
+              "clientId": "'"${{ secrets.PORT_CLIENT_ID }}"'",
+              "clientSecret": "'"${{ secrets.PORT_CLIENT_SECRET }}"'"
           }' | jq -r '.accessToken')
           echo "ACCESS_TOKEN=$access_token" >> $GITHUB_ENV
 
@@ -37,77 +37,71 @@ jobs:
 
       - name: Create External Ticket Entity
         run: |
-          if [[ "${{ env.TYPE }}" == "Jira" ]]; then
+          if [[ "${TYPE}" == "Jira" ]]; then
             BLUEPRINT="jira_ticket"
-            URL="https://jira.example.com/browse/${{ env.IDENTIFIER }}"
-            BODY=$(jq -n \
-              --arg id "${{ env.IDENTIFIER }}" \
-              --arg url "$URL" \
-              --arg ticket "${{ env.IDENTIFIER }}" \
-              '{
-                identifier: $id,
-                title: "Jira Ticket Simulation",
-                blueprint: "jira_ticket",
-                properties: {
-                  jira_project: "PORT",
-                  jira_issue_type: "Task",
-                  jira_ticket_id: $id,
-                  jira_url: $url,
-                  status: "Open"
-                },
-                relations: {
-                  original_ticket: $ticket
-                }
-              }')
+            URL="https://jira.example.com/browse/${IDENTIFIER}"
+            cat <<EOF > entity.json
+{
+  "identifier": "${IDENTIFIER}",
+  "title": "Jira Ticket Simulation",
+  "blueprint": "jira_ticket",
+  "properties": {
+    "jira_project": "PORT",
+    "jira_issue_type": "Task",
+    "jira_ticket_id": "${IDENTIFIER}",
+    "jira_url": "${URL}",
+    "status": "Open"
+  },
+  "relations": {
+    "original_ticket": "${IDENTIFIER}"
+  }
+}
+EOF
 
-          elif [[ "${{ env.TYPE }}" == "SharePoint" ]]; then
+          elif [[ "${TYPE}" == "SharePoint" ]]; then
             BLUEPRINT="sharepoint_ticket"
-            URL="https://sharepoint.example.com/tickets/${{ env.IDENTIFIER }}"
-            BODY=$(jq -n \
-              --arg id "${{ env.IDENTIFIER }}" \
-              --arg url "$URL" \
-              --arg ticket "${{ env.IDENTIFIER }}" \
-              '{
-                identifier: $id,
-                title: "SharePoint Ticket Simulation",
-                blueprint: "sharepoint_ticket",
-                properties: {
-                  sharepoint_list: "IT Requests",
-                  sharepoint_ticket_id: $id,
-                  sharepoint_url: $url,
-                  status: "Open"
-                },
-                relations: {
-                  original_ticket: $ticket
-                }
-              }')
+            URL="https://sharepoint.example.com/tickets/${IDENTIFIER}"
+            cat <<EOF > entity.json
+{
+  "identifier": "${IDENTIFIER}",
+  "title": "SharePoint Ticket Simulation",
+  "blueprint": "sharepoint_ticket",
+  "properties": {
+    "sharepoint_list": "IT Requests",
+    "sharepoint_ticket_id": "${IDENTIFIER}",
+    "sharepoint_url": "${URL}",
+    "status": "Open"
+  },
+  "relations": {
+    "original_ticket": "${IDENTIFIER}"
+  }
+}
+EOF
 
           else
             BLUEPRINT="other_ticket_system"
-            BODY=$(jq -n \
-              --arg id "${{ env.IDENTIFIER }}" \
-              --arg ticket "${{ env.IDENTIFIER }}" \
-              '{
-                identifier: $id,
-                title: "Other Ticket Simulation",
-                blueprint: "other_ticket_system",
-                properties: {
-                  ticket_id: $id,
-                  status: "Open"
-                },
-                relations: {
-                  original_ticket: $ticket
-                }
-              }')
+            cat <<EOF > entity.json
+{
+  "identifier": "${IDENTIFIER}",
+  "title": "Other Ticket Simulation",
+  "blueprint": "other_ticket_system",
+  "properties": {
+    "ticket_id": "${IDENTIFIER}",
+    "status": "Open"
+  },
+  "relations": {
+    "original_ticket": "${IDENTIFIER}"
+  }
+}
+EOF
           fi
 
-          echo "$BODY" > entity.json
+          echo "BLUEPRINT=$BLUEPRINT" >> $GITHUB_ENV
+
           curl -s -X POST "https://api.getport.io/v1/blueprints/${BLUEPRINT}/entities" \
             -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d @entity.json
-
-          echo "BLUEPRINT=$BLUEPRINT" >> $GITHUB_ENV
 
       - name: Simulate Status: In-Progress
         run: |
