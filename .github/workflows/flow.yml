@@ -30,7 +30,7 @@ jobs:
         id: create-ticket
         run: |
           TICKET_ID="ticket-sim-${{ github.run_id }}"
-          TYPE=$(echo '${{ inputs.port_payload }}' | jq -r '.entity.properties.type')
+          TYPE=$(echo '${{ inputs.port_payload }}' | jq -r '.properties.type')
           echo "TYPE=$TYPE" >> $GITHUB_ENV
 
           if [[ "$TYPE" == "Jira" ]]; then
@@ -44,6 +44,9 @@ jobs:
                 jira_ticket_id: $id,
                 jira_url: $ticket_url,
                 status: "Open"
+              },
+              relations: {
+                original_ticket: $(echo '${{ inputs.port_payload }}' | jq -r '.identifier')
               }
             }')
           elif [[ "$TYPE" == "SharePoint" ]]; then
@@ -57,6 +60,9 @@ jobs:
                 sharepoint_ticket_id: $id,
                 sharepoint_url: $url,
                 status: "Open"
+              },
+              relations: {
+                original_ticket: $(echo '${{ inputs.port_payload }}' | jq -r '.identifier')
               }
             }')
           else
@@ -68,6 +74,9 @@ jobs:
               properties: {
                 ticket_id: $id,
                 status: "Open"
+              },
+              relations: {
+                original_ticket: $(echo '${{ inputs.port_payload }}' | jq -r '.identifier')
               }
             }')
           fi
