@@ -5,7 +5,7 @@ on:
     inputs:
       port_payload:
         required: true
-        description: "Port payload with details about the ticket entity"
+        description: "Port event payload"
         type: string
 
 jobs:
@@ -26,82 +26,109 @@ jobs:
           }' | jq -r '.accessToken')
           echo "ACCESS_TOKEN=$access_token" >> $GITHUB_ENV
 
-      - name: Determine Ticket Type and Create Entity
-        id: create-ticket
+      - name: Parse Ticket Payload
+        id: parse-ticket
         run: |
-          TICKET_ID="ticket-sim-${{ github.run_id }}"
-          TYPE=$(echo '${{ inputs.port_payload }}' | jq -r '.entity.properties.type')
+          echo '${{ inputs.port_payload }}' > payload.json
+          TYPE=$(jq -r '.diff.after.properties.type' payload.json)
+          IDENTIFIER=$(jq -r '.diff.after.identifier' payload.json)
           echo "TYPE=$TYPE" >> $GITHUB_ENV
+          echo "IDENTIFIER=$IDENTIFIER" >> $GITHUB_ENV
 
-          if [[ "$TYPE" == "Jira" ]]; then
-            BP="jira_ticket"
-            PAYLOAD=$(jq -n --arg id "$TICKET_ID" --arg ticket_url "https://jira.example.com/browse/$TICKET_ID" '{
-              identifier: $id,
-              title: "Jira Ticket Simulation",
-              blueprint: "jira_ticket",
-              properties: {
-                jira_project: "DEV",
-                jira_ticket_id: $id,
-                jira_url: $ticket_url,
-                status: "Open"
-              }
-            }')
-          elif [[ "$TYPE" == "SharePoint" ]]; then
-            BP="sharepoint_ticket"
-            PAYLOAD=$(jq -n --arg id "$TICKET_ID" --arg url "https://sharepoint.example.com/$TICKET_ID" '{
-              identifier: $id,
-              title: "SharePoint Ticket Simulation",
-              blueprint: "sharepoint_ticket",
-              properties: {
-                sharepoint_list: "Requests",
-                sharepoint_ticket_id: $id,
-                sharepoint_url: $url,
-                status: "Open"
-              }
-            }')
+      - name: Create External Ticket Entity
+        run: |
+          if [[ "${{ env.TYPE }}" == "Jira" ]]; then
+            BLUEPRINT="jira_ticket"
+            URL="https://jira.example.com/browse/${{ env.IDENTIFIER }}"
+            BODY=$(jq -n \
+              --arg id "${{ env.IDENTIFIER }}" \
+              --arg url "$URL" \
+              --arg ticket "${{ env.IDENTIFIER }}" \
+              '{
+                identifier: $id,
+                title: "Jira Ticket Simulation",
+                blueprint: "jira_ticket",
+                properties: {
+                  jira_project: "PORT",
+                  jira_issue_type: "Task",
+                  jira_ticket_id: $id,
+                  jira_url: $url,
+                  status: "Open"
+                },
+                relations: {
+                  original_ticket: $ticket
+                }
+              }')
+
+          elif [[ "${{ env.TYPE }}" == "SharePoint" ]]; then
+            BLUEPRINT="sharepoint_ticket"
+            URL="https://sharepoint.example.com/tickets/${{ env.IDENTIFIER }}"
+            BODY=$(jq -n \
+              --arg id "${{ env.IDENTIFIER }}" \
+              --arg url "$URL" \
+              --arg ticket "${{ env.IDENTIFIER }}" \
+              '{
+                identifier: $id,
+                title: "SharePoint Ticket Simulation",
+                blueprint: "sharepoint_ticket",
+                properties: {
+                  sharepoint_list: "IT Requests",
+                  sharepoint_ticket_id: $id,
+                  sharepoint_url: $url,
+                  status: "Open"
+                },
+                relations: {
+                  original_ticket: $ticket
+                }
+              }')
+
           else
-            BP="other_ticket_system"
-            PAYLOAD=$(jq -n --arg id "$TICKET_ID" '{
-              identifier: $id,
-              title: "Other Ticket Simulation",
-              blueprint: "other_ticket_system",
-              properties: {
-                ticket_id: $id,
-                status: "Open"
-              }
-            }')
+            BLUEPRINT="other_ticket_system"
+            BODY=$(jq -n \
+              --arg id "${{ env.IDENTIFIER }}" \
+              --arg ticket "${{ env.IDENTIFIER }}" \
+              '{
+                identifier: $id,
+                title: "Other Ticket Simulation",
+                blueprint: "other_ticket_system",
+                properties: {
+                  ticket_id: $id,
+                  status: "Open"
+                },
+                relations: {
+                  original_ticket: $ticket
+                }
+              }')
           fi
 
-          echo "$PAYLOAD" > payload.json
+          echo "$BODY" > entity.json
+          curl -s -X POST "https://api.getport.io/v1/blueprints/${BLUEPRINT}/entities" \
+            -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d @entity.json
 
-          curl -s -X POST "https://api.getport.io/v1/blueprints/$BP/entities" \
-          -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
-          -H "Content-Type: application/json" \
-          -d @payload.json
+          echo "BLUEPRINT=$BLUEPRINT" >> $GITHUB_ENV
 
-          echo "TICKET_IDENTIFIER=$TICKET_ID" >> $GITHUB_ENV
-          echo "BP=$BP" >> $GITHUB_ENV
-
-      - name: Update Status to In Progress (After 30s)
+      - name: Simulate Status: In Progress
         run: |
           sleep 30
-          curl -s -X PATCH "https://api.getport.io/v1/blueprints/${{ env.BP }}/entities/${{ env.TICKET_IDENTIFIER }}" \
-          -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
-          -H "Content-Type: application/json" \
-          -d '{"properties": { "status": "In Progress" }}'
+          curl -s -X PATCH "https://api.getport.io/v1/blueprints/${{ env.BLUEPRINT }}/entities/${{ env.IDENTIFIER }}" \
+            -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"properties": { "status": "In Progress" }}'
 
-      - name: Update Status to Resolved (After 30s)
+      - name: Simulate Status: Resolved
         run: |
           sleep 30
-          curl -s -X PATCH "https://api.getport.io/v1/blueprints/${{ env.BP }}/entities/${{ env.TICKET_IDENTIFIER }}" \
-          -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
-          -H "Content-Type: application/json" \
-          -d '{"properties": { "status": "Resolved" }}'
+          curl -s -X PATCH "https://api.getport.io/v1/blueprints/${{ env.BLUEPRINT }}/entities/${{ env.IDENTIFIER }}" \
+            -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"properties": { "status": "Resolved" }}'
 
-      - name: Update Status to Closed (After 30s)
+      - name: Simulate Status: Closed
         run: |
           sleep 30
-          curl -s -X PATCH "https://api.getport.io/v1/blueprints/${{ env.BP }}/entities/${{ env.TICKET_IDENTIFIER }}" \
-          -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
-          -H "Content-Type: application/json" \
-          -d '{"properties": { "status": "Closed" }}'
+          curl -s -X PATCH "https://api.getport.io/v1/blueprints/${{ env.BLUEPRINT }}/entities/${{ env.IDENTIFIER }}" \
+            -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"properties": { "status": "Closed" }}'
