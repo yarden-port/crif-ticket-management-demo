@@ -110,7 +110,7 @@ jobs:
 
       - name: Update Status to In Progress (After 30s)
         run: |
-          sleep 90
+          sleep 45
           curl -s -X PATCH "https://api.getport.io/v1/blueprints/${{ env.BP }}/entities/${{ env.TICKET_IDENTIFIER }}" \
           -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
           -H "Content-Type: application/json" \
@@ -118,7 +118,7 @@ jobs:
 
       - name: Update Status to Resolved (After 30s)
         run: |
-          sleep 90
+          sleep 45
           curl -s -X PATCH "https://api.getport.io/v1/blueprints/${{ env.BP }}/entities/${{ env.TICKET_IDENTIFIER }}" \
           -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
           -H "Content-Type: application/json" \
@@ -126,7 +126,7 @@ jobs:
 
       - name: Update Status to Closed (After 30s)
         run: |
-          sleep 90
+          sleep 45
           curl -s -X PATCH "https://api.getport.io/v1/blueprints/${{ env.BP }}/entities/${{ env.TICKET_IDENTIFIER }}" \
           -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
           -H "Content-Type: application/json" \
