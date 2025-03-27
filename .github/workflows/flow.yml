@@ -26,70 +26,87 @@ jobs:
           }' | jq -r '.accessToken')
           echo "ACCESS_TOKEN=$access_token" >> $GITHUB_ENV
 
-      - name: Determine Ticket Type and Create Entity
+            - name: Determine Ticket Type and Create Entity
         id: create-ticket
         run: |
+          echo '${{ inputs.port_payload }}' > payload.json
           TICKET_ID="ticket-sim-${{ github.run_id }}"
-          TYPE=$(echo '${{ inputs.port_payload }}' | jq -r '.properties.type')
+          TYPE=$(jq -r '.properties.type' payload.json)
+          ORIGINAL_ID=$(jq -r '.identifier' payload.json)
+
           echo "TYPE=$TYPE" >> $GITHUB_ENV
+          echo "TICKET_IDENTIFIER=$TICKET_ID" >> $GITHUB_ENV
 
           if [[ "$TYPE" == "Jira" ]]; then
             BP="jira_ticket"
-            PAYLOAD=$(jq -n --arg id "$TICKET_ID" --arg ticket_url "https://jira.example.com/browse/$TICKET_ID" '{
-              identifier: $id,
-              title: "Jira Ticket Simulation",
-              blueprint: "jira_ticket",
-              properties: {
-                jira_project: "DEV",
-                jira_ticket_id: $id,
-                jira_url: $ticket_url,
-                status: "Open"
-              },
-              relations: {
-                original_ticket: $(echo '${{ inputs.port_payload }}' | jq -r '.identifier')
-              }
-            }')
+            ticket_url="https://jira.example.com/browse/$TICKET_ID"
+            jq -n \
+              --arg id "$TICKET_ID" \
+              --arg ticket_url "$ticket_url" \
+              --arg original "$ORIGINAL_ID" \
+              '{
+                identifier: $id,
+                title: "Jira Ticket Simulation",
+                blueprint: "jira_ticket",
+                properties: {
+                  jira_project: "DEV",
+                  jira_ticket_id: $id,
+                  jira_url: $ticket_url,
+                  status: "Open"
+                },
+                relations: {
+                  original_ticket: $original
+                }
+              }' > payload.json
+
           elif [[ "$TYPE" == "SharePoint" ]]; then
             BP="sharepoint_ticket"
-            PAYLOAD=$(jq -n --arg id "$TICKET_ID" --arg url "https://sharepoint.example.com/$TICKET_ID" '{
-              identifier: $id,
-              title: "SharePoint Ticket Simulation",
-              blueprint: "sharepoint_ticket",
-              properties: {
-                sharepoint_list: "Requests",
-                sharepoint_ticket_id: $id,
-                sharepoint_url: $url,
-                status: "Open"
-              },
-              relations: {
-                original_ticket: $(echo '${{ inputs.port_payload }}' | jq -r '.identifier')
-              }
-            }')
+            sharepoint_url="https://sharepoint.example.com/$TICKET_ID"
+            jq -n \
+              --arg id "$TICKET_ID" \
+              --arg sharepoint_url "$sharepoint_url" \
+              --arg original "$ORIGINAL_ID" \
+              '{
+                identifier: $id,
+                title: "SharePoint Ticket Simulation",
+                blueprint: "sharepoint_ticket",
+                properties: {
+                  sharepoint_list: "Requests",
+                  sharepoint_ticket_id: $id,
+                  sharepoint_url: $sharepoint_url,
+                  status: "Open"
+                },
+                relations: {
+                  original_ticket: $original
+                }
+              }' > payload.json
+
           else
             BP="other_ticket_system"
-            PAYLOAD=$(jq -n --arg id "$TICKET_ID" '{
-              identifier: $id,
-              title: "Other Ticket Simulation",
-              blueprint: "other_ticket_system",
-              properties: {
-                ticket_id: $id,
-                status: "Open"
-              },
-              relations: {
-                original_ticket: $(echo '${{ inputs.port_payload }}' | jq -r '.identifier')
-              }
-            }')
+            jq -n \
+              --arg id "$TICKET_ID" \
+              --arg original "$ORIGINAL_ID" \
+              '{
+                identifier: $id,
+                title: "Other Ticket Simulation",
+                blueprint: "other_ticket_system",
+                properties: {
+                  ticket_id: $id,
+                  status: "Open"
+                },
+                relations: {
+                  original_ticket: $original
+                }
+              }' > payload.json
           fi
 
-          echo "$PAYLOAD" > payload.json
+          echo "BP=$BP" >> $GITHUB_ENV
 
           curl -s -X POST "https://api.getport.io/v1/blueprints/$BP/entities" \
-          -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
-          -H "Content-Type: application/json" \
-          -d @payload.json
+            -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d @payload.json
 
-          echo "TICKET_IDENTIFIER=$TICKET_ID" >> $GITHUB_ENV
-          echo "BP=$BP" >> $GITHUB_ENV
 
       - name: Update Status to In Progress (After 30s)
         run: |
