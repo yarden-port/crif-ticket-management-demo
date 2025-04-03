@@ -1,7 +1,7 @@
 name: Simulate External Ticket Lifecycle
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       port_payload:
         required: true
